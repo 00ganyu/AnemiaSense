@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnemiaSense – Quick Check</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center py-10 px-2">
+  <!-- Card Container -->
+  <div class="bg-white shadow-xl rounded-2xl max-w-lg w-full p-8">
+    <h1 class="text-2xl font-semibold text-center text-indigo-600 mb-6">AnemiaSense – Quick Check</h1>
+
+    <!-- Prediction Form -->
+    <form id="predict-form" class="space-y-4">
+      <!-- Gender -->
+      <div>
+        <label for="gender" class="block text-sm font-medium text-gray-700">Gender</label>
+        <select id="gender" name="gender" required class="mt-1 block w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500">
+          <option value="0">Male</option>
+          <option value="1">Female</option>
+        </select>
+      </div>
+      <!-- Hemoglobin -->
+      <div>
+        <label for="hemoglobin" class="block text-sm font-medium text-gray-700">Hemoglobin (g/dL)</label>
+        <input type="number" step="0.1" id="hemoglobin" name="hemoglobin" required class="mt-1 block w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+      </div>
+      <!-- MCH -->
+      <div>
+        <label for="mch" class="block text-sm font-medium text-gray-700">MCH (pg)</label>
+        <input type="number" step="0.1" id="mch" name="mch" required class="mt-1 block w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+      </div>
+      <!-- MCHC -->
+      <div>
+        <label for="mchc" class="block text-sm font-medium text-gray-700">MCHC (g/dL)</label>
+        <input type="number" step="0.1" id="mchc" name="mchc" required class="mt-1 block w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+      </div>
+      <!-- MCV -->
+      <div>
+        <label for="mcv" class="block text-sm font-medium text-gray-700">MCV (fL)</label>
+        <input type="number" step="0.1" id="mcv" name="mcv" required class="mt-1 block w-full rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" />
+      </div>
+
+      <button type="submit" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-semibold hover:bg-indigo-700 transition">
+        Predict
+      </button>
+    </form>
+
+    <!-- Result Section -->
+    <div id="result" class="mt-6 hidden">
+      <h2 class="text-xl font-semibold mb-2">Prediction Result</h2>
+      <p class="text-lg" id="prediction-text"></p>
+    </div>
+
+    <hr class="my-6" />
+
+    <!-- History Section -->
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-lg font-semibold">Previous Checks</h2>
+      <button id="load-history" class="text-indigo-600 hover:underline text-sm">Refresh</button>
+    </div>
+    <div id="history" class="overflow-x-auto max-h-60"></div>
+  </div>
+
+  <script>
+    // Build history table helper (Gender, Hb, MCH, MCHC, MCV, Prediction)
+    function buildHistoryTable(rows) {
+      if (!rows.length) {
+        return '<p class="text-sm text-gray-500">No history yet.</p>';
+      }
+      let header = `<thead class=\"bg-gray-50\"><tr>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Gender</th>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Hb</th>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">MCH</th>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">MCHC</th>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">MCV</th>
+        <th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Prediction</th>
+      </tr></thead>`;
+
+      let body = rows.map(r => `<tr class=\"odd:bg-white even:bg-gray-50\">
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm\">${r[1]}</td>
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm\">${r[0]}</td>
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm\">${r[2] ?? '-'}</td>
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm\">${r[3] ?? '-'}</td>
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm\">${r[4] ?? '-'}</td>
+        <td class=\"px-3 py-2 whitespace-nowrap text-sm font-medium\">${r.at(-1)}</td>
+      </tr>`).join('');
+      return `<table class=\"min-w-full divide-y divide-gray-200 text-center text-sm\">${header}<tbody class=\"divide-y divide-gray-200\">${body}</tbody></table>`;
+    }
+
+    // Form submit handler
+    document.getElementById('predict-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const gender = parseInt(document.getElementById('gender').value);
+      const hb     = parseFloat(document.getElementById('hemoglobin').value);
+      const mcv    = parseFloat(document.getElementById('mcv').value);
+      const mch    = parseFloat(document.getElementById('mch').value);
+      const mchc   = parseFloat(document.getElementById('mchc').value);
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gender, hemoglobin: hb, mcv, mch, mchc })
+        });
+        if (!res.ok) throw new Error('Prediction failed');
+        const data = await res.json();
+        document.getElementById('prediction-text').textContent = `Result: ${data.prediction}`;
+        document.getElementById('result').classList.remove('hidden');
+        loadHistory();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    // Load history from backend
+    async function loadHistory() {
+      try {
+        const res = await fetch('/history');
+        if (!res.ok) throw new Error('Could not fetch history');
+        const rows = await res.json();
+        document.getElementById('history').innerHTML = buildHistoryTable(rows);
+      } catch (err) {
+        document.getElementById('history').innerHTML = '<p class="text-sm text-red-600">' + err.message + '</p>';
+      }
+    }
+
+    document.getElementById('load-history').addEventListener('click', loadHistory);
+    loadHistory();
+  </script>
+</body>
+</html>
